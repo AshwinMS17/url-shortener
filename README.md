@@ -76,3 +76,52 @@ curl -s localhost:8080/aZ3kP9/stats       # {"code":"aZ3kP9",...,"clickCount":1,
 ```bash
 mvn clean verify
 ```
+
+This runs the unit / in-memory tests. The DynamoDB integration test
+(`DynamoDbUrlRepositoryTest`) needs a Docker daemon and **self-skips** when one
+isn't reachable, so `mvn verify` stays green on a machine without Docker.
+
+### Running the DynamoDB tests
+
+`DynamoDbUrlRepositoryTest` uses [Testcontainers](https://java.testcontainers.org/)
+to boot LocalStack and exercise the real DynamoDB API (save/get, the atomic
+counter update expression, `@DynamoDbBean` mapping, concurrent increments).
+
+This project uses [Colima](https://github.com/abiosoft/colima) as the Docker
+runtime — a lightweight VM that installs and uninstalls cleanly (no Docker
+Desktop, no privileged helper):
+
+```bash
+brew install colima docker      # one-time
+colima start --cpu 2 --memory 4 --disk 20
+```
+
+Then run the full suite through the helper script:
+
+```bash
+./scripts/integration-tests.sh
+```
+
+The script exports the two Colima-specific hints Testcontainers needs
+(`DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`) and runs `mvn verify`.
+The Docker API version pin lives in `pom.xml` (surefire `<argLine>`), because
+Colima's engine rejects the docker-java client's default. Extra Maven args pass
+through: `./scripts/integration-tests.sh -Dtest=DynamoDbUrlRepositoryTest`.
+
+Stop the VM when you're done (state is kept for next time):
+
+```bash
+colima stop
+```
+
+### Removing the Docker setup
+
+Nothing here touches system files; removal is complete:
+
+```bash
+colima stop
+colima delete            # deletes the VM and every image/container inside it
+brew uninstall colima docker
+brew autoremove          # drops the 'lima' dependency colima pulled in
+rm -rf ~/.colima ~/.lima ~/.docker    # optional: leftover config/state
+```

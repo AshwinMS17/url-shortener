@@ -95,6 +95,17 @@ Branch `day3-dynamodb`.
 - Tests: `DynamoDbUrlRepositoryTest` — Testcontainers + LocalStack, 5 tests
   (wiring, save/read, missing-code, increment semantics, 50-way concurrent increment).
   `@Testcontainers(disabledWithoutDocker = true)` so `mvn verify` still passes with no Docker.
+- Test infra:
+  - `testcontainers.version` overridden to `1.20.6` (Spring Boot 3.3.4 pins 1.19.8, whose
+    docker-java negotiates Docker API 1.32 — rejected by modern daemons).
+  - `maven-surefire-plugin` `<argLine>-Dapi.version=1.44</argLine>` — pins the Remote API
+    version for docker-java (Colima's engine has `MinAPIVersion 1.40`).
+  - `scripts/integration-tests.sh` — ensures Colima is up, exports `DOCKER_HOST` +
+    `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` (Colima's socket isn't at the default path and
+    Ryuk needs the in-VM path), then runs `mvn verify`.
+  - Local Docker runtime = Colima (see README "Removing the Docker setup" for teardown).
+  - Verified: `./scripts/integration-tests.sh` → 7 tests, 0 skipped, BUILD SUCCESS;
+    plain `mvn verify` (no Docker env) → 5 skipped, BUILD SUCCESS.
 
 ## Day 4 — API-key auth (planned)
 

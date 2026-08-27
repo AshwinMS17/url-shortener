@@ -20,6 +20,10 @@
     <properties>
         <java.version>17</java.version>
         <awssdk.version>2.28.11</awssdk.version>
+        <!-- Override the Spring Boot 3.3.4 managed version (1.19.8): its bundled
+             docker-java negotiates Docker API 1.32, which modern daemons
+             (Docker 25+, Colima) reject. 1.20.x ships a newer docker-java. -->
+        <testcontainers.version>1.20.6</testcontainers.version>
     </properties>
 
     <dependencies>
@@ -71,6 +75,18 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Pin the Docker Remote API version for the docker-java client that
+                         Testcontainers uses. Without this it defaults to 1.32 and modern
+                         daemons (Docker 25+, Colima) reject it as too old. 1.44 = Docker 25.
+                         Harmless on any daemon that supports >= 1.44. -->
+                    <argLine>-Dapi.version=1.44</argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>
