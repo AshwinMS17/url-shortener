@@ -42,14 +42,14 @@ public class UrlService {
     }
 
     /**
-     * Looks up a short URL and increments its click count in one step.
-     * Used by the redirect endpoint.
+     * Atomically increments the click count and returns the updated record.
+     * Used by the redirect endpoint - the hot path - so the increment is a single
+     * storage operation rather than a read-modify-write that could lose counts
+     * under concurrent clicks.
      */
     public ShortUrl recordClickAndGet(String code) {
-        ShortUrl shortUrl = getByCode(code);
-        shortUrl.incrementClickCount();
-        repository.save(shortUrl); // no-op for in-memory map, matters once DynamoDB is real storage
-        return shortUrl;
+        return repository.incrementClickCountAndGet(code)
+                .orElseThrow(() -> new UrlNotFoundException(code));
     }
 
     private String generateUniqueCode() {

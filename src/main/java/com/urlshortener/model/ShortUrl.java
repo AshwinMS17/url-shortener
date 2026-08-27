@@ -1,15 +1,22 @@
 package com.urlshortener.model;
 
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
+
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Represents a single shortened URL record.
  *
- * Kept as a plain POJO for the Day 1-2 in-memory version.
- * On Day 3 we'll add @DynamoDbBean / @DynamoDbPartitionKey annotations
- * to make this persistable to DynamoDB without changing the shape much.
+ * The @DynamoDbBean annotations let the enhanced client map this straight to a
+ * DynamoDB item (partition key = "code"). The in-memory repository ignores them
+ * and just stores the object as-is, so the same class serves both profiles.
+ *
+ * clickCount stays an AtomicLong so the in-memory path can increment it safely;
+ * the enhanced client only sees the long getter/setter pair and maps it as a Number.
  */
+@DynamoDbBean
 public class ShortUrl {
 
     private String code;        // the short code, e.g. "aZ3kP9" - will be the partition key
@@ -28,6 +35,7 @@ public class ShortUrl {
         this.createdAt = Instant.now();
     }
 
+    @DynamoDbPartitionKey
     public String getCode() {
         return code;
     }

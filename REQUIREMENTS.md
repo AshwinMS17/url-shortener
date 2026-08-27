@@ -16,7 +16,7 @@ Build is phased so each stage runs on its own before the next is wired in:
 | Phase | Scope | Status |
 |-------|-------|--------|
 | Day 1–2 | In-memory REST API: shorten, redirect, stats, validation, error handling | ✅ Done |
-| Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ⬜ Not started |
+| Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ✅ Done |
 | Day 4 | API-key authentication; real `ownerId` on records | ⬜ Not started |
 | Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ⬜ Not started (`k8s/` dir is empty) |
 
@@ -64,19 +64,37 @@ Build is phased so each stage runs on its own before the next is wired in:
 
 ---
 
-## Day 3 — DynamoDB persistence (planned)
+## Day 3 — DynamoDB persistence (implemented)
 
-- Dependency already present: `software.amazon.awssdk:dynamodb-enhanced:2.28.11`.
-- Add `@DynamoDbBean` / `@DynamoDbPartitionKey` to `ShortUrl`; `code` is the partition key.
-- New `DynamoDbUrlRepository implements UrlRepository`, active on `@Profile("dynamodb")`. Rest of the app is untouched (service depends only on the interface).
-- `recordClickAndGet` — the `repository.save(...)` after `incrementClickCount()` becomes a real persisted write (currently a no-op for the map). Consider an atomic DynamoDB update-expression for the counter rather than read-modify-write.
-- Config to add (commented stub already in `application.yml`):
-  ```yaml
-  aws:
-    dynamodb:
-      table-name: ${DYNAMODB_TABLE_NAME:url-shortener}
-      region: ${AWS_REGION:us-east-1}
-  ```
+Branch `day3-dynamodb`.
+
+- `ShortUrl` annotated with `@DynamoDbBean` + `@DynamoDbPartitionKey` on `getCode()`
+  (partition key `code`). `clickCount` stays an `AtomicLong` internally; the enhanced
+  client only sees the `long` getter/setter and maps it as a Number.
+- `DynamoDbUrlRepository implements UrlRepository`, `@Profile("dynamodb")`.
+  `InMemoryUrlRepository` is `@Profile("!dynamodb")` — exactly one is active. The service
+  layer is unchanged (depends only on the interface).
+- **Atomic click counter.** New interface method
+  `Optional<ShortUrl> incrementClickCountAndGet(String code)` replaces the old
+  read-modify-write in `recordClickAndGet`.
+  - DynamoDB impl: low-level `UpdateItem` with
+    `SET #cc = if_not_exists(#cc, :zero) + :one`, `attribute_exists(#c)` condition,
+    `ReturnValue.ALL_NEW`; `ConditionalCheckFailedException` → `Optional.empty()`.
+  - In-memory impl: `ConcurrentHashMap.computeIfPresent` + the record's `AtomicLong`.
+- Two AWS clients wired in `DynamoDbConfig` (`@Profile("dynamodb")`):
+  `DynamoDbEnhancedClient` for object-mapped put/get, low-level `DynamoDbClient` for the
+  update expression. Credentials: static keys if `aws.dynamodb.access-key/secret-key` set
+  (local), otherwise `DefaultCredentialsProvider` (env / profile / EKS IRSA).
+- `AwsDynamoProperties` (`@ConfigurationProperties("aws.dynamodb")`): `table-name`,
+  `region`, `endpoint`, `access-key`, `secret-key`, `create-table-on-startup`.
+- `DynamoDbTableInitializer` creates the table on `ApplicationReadyEvent` when
+  `create-table-on-startup=true` (local/dev only; real envs use IaC).
+- `application.yml` `aws.dynamodb.*` block with env-var overrides
+  (`DYNAMODB_TABLE_NAME`, `AWS_REGION`, `DYNAMODB_ENDPOINT`, `AWS_ACCESS_KEY_ID`,
+  `AWS_SECRET_ACCESS_KEY`, `DYNAMODB_CREATE_TABLE`).
+- Tests: `DynamoDbUrlRepositoryTest` — Testcontainers + LocalStack, 5 tests
+  (wiring, save/read, missing-code, increment semantics, 50-way concurrent increment).
+  `@Testcontainers(disabledWithoutDocker = true)` so `mvn verify` still passes with no Docker.
 
 ## Day 4 — API-key auth (planned)
 

@@ -38,7 +38,7 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- DynamoDB Enhanced Client - wired in on Day 3, harmless to have now -->
+        <!-- DynamoDB Enhanced Client - persistence layer (Day 3) -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>dynamodb-enhanced</artifactId>
@@ -48,6 +48,20 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers + LocalStack: exercises the DynamoDB repository against a
+             real DynamoDB API without an AWS account. Versions managed by the
+             spring-boot-starter-parent BOM. Tests self-skip when Docker is absent. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>localstack</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

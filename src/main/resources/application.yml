@@ -13,8 +13,18 @@ management:
     health:
       show-details: never
 
-# Day 3 will add:
-# aws:
-#   dynamodb:
-#     table-name: ${DYNAMODB_TABLE_NAME:url-shortener}
-#     region: ${AWS_REGION:us-east-1}
+# DynamoDB persistence. Only used when the "dynamodb" profile is active
+# (SPRING_PROFILES_ACTIVE=dynamodb); otherwise the in-memory repository is used.
+aws:
+  dynamodb:
+    table-name: ${DYNAMODB_TABLE_NAME:url-shortener}
+    region: ${AWS_REGION:us-east-1}
+    # Optional endpoint override for LocalStack / DynamoDB Local. Blank = real AWS.
+    endpoint: ${DYNAMODB_ENDPOINT:}
+    # Static credentials for local runs only. Blank = DefaultCredentialsProvider
+    # (env vars, profile, or the IAM role attached to the pod on EKS).
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
+    # Create the table on startup if it is missing. Handy for local/dev;
+    # in real environments the table is provisioned by infrastructure-as-code.
+    create-table-on-startup: ${DYNAMODB_CREATE_TABLE:false}

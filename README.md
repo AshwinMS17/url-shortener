@@ -12,7 +12,7 @@ See [REQUIREMENTS.md](REQUIREMENTS.md) for the full spec and the phased (Day 1�
 | Phase | Scope | Status |
 |-------|-------|--------|
 | Day 1–2 | In-memory REST API: shorten, redirect, stats, validation, error handling | ✅ Done |
-| Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ⬜ |
+| Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ✅ Done |
 | Day 4 | API-key authentication; real `ownerId` on records | ⬜ |
 | Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ⬜ |
 
@@ -23,6 +23,32 @@ mvn spring-boot:run
 ```
 
 The service starts on `http://localhost:8080` (configurable via `app.base-url` / `server.port`).
+By default it uses an in-memory store that resets on restart.
+
+### With DynamoDB persistence
+
+Activate the `dynamodb` profile. Against a local LocalStack / DynamoDB Local:
+
+```bash
+docker run --rm -p 4566:4566 localstack/localstack:3.5
+
+SPRING_PROFILES_ACTIVE=dynamodb \
+DYNAMODB_ENDPOINT=http://localhost:4566 \
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+DYNAMODB_CREATE_TABLE=true \
+mvn spring-boot:run
+```
+
+Against real AWS, set only `SPRING_PROFILES_ACTIVE=dynamodb` and `AWS_REGION`; credentials
+come from the default provider chain (env, shared profile, or the pod's IAM role on EKS),
+and the table is provisioned by infrastructure-as-code (Day 5).
+
+| Env var | Purpose | Default |
+|---|---|---|
+| `DYNAMODB_TABLE_NAME` | Table name | `url-shortener` |
+| `AWS_REGION` | Region | `us-east-1` |
+| `DYNAMODB_ENDPOINT` | Endpoint override for LocalStack/local | *(none → real AWS)* |
+| `DYNAMODB_CREATE_TABLE` | Create the table on startup if missing | `false` |
 
 ## API
 
