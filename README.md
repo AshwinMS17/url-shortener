@@ -13,7 +13,7 @@ See [REQUIREMENTS.md](REQUIREMENTS.md) for the full spec and the phased (Day 1�
 |-------|-------|--------|
 | Day 1–2 | In-memory REST API: shorten, redirect, stats, validation, error handling | ✅ Done |
 | Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ✅ Done |
-| Day 4 | API-key authentication; real `ownerId` on records | ⬜ |
+| Day 4 | API-key authentication; real `ownerId` on records | ✅ Done |
 | Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ⬜ |
 
 ## Run
@@ -24,6 +24,9 @@ mvn spring-boot:run
 
 The service starts on `http://localhost:8080` (configurable via `app.base-url` / `server.port`).
 By default it uses an in-memory store that resets on restart.
+
+Creating short URLs requires an API key (see [Authentication](#authentication)); the default
+config ships one throwaway local key, `dev-secret-change-me`.
 
 ### With DynamoDB persistence
 
@@ -52,22 +55,36 @@ and the table is provisioned by infrastructure-as-code (Day 5).
 
 ## API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/shorten` | Body `{ "longUrl": "https://..." }`. Optional `X-API-Key` header. Returns `201` with `{ code, shortUrl, longUrl }`. |
-| `GET` | `/{code}` | `302` redirect to the original URL; increments the click counter. |
-| `GET` | `/{code}/stats` | `{ code, longUrl, clickCount, createdAt }`. |
-| `GET` | `/actuator/health`, `/actuator/info` | Actuator endpoints. |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/shorten` | **`X-API-Key` required** | Body `{ "longUrl": "https://..." }`. Returns `201` with `{ code, shortUrl, longUrl }`. `401` if the key is missing or unknown. |
+| `GET` | `/{code}` | public | `302` redirect to the original URL; increments the click counter. |
+| `GET` | `/{code}/stats` | public | `{ code, longUrl, clickCount, createdAt }`. |
+| `GET` | `/actuator/health`, `/actuator/info` | public | Actuator endpoints. |
+
+### Authentication
+
+`POST /shorten` requires an `X-API-Key` header. Keys are configured as
+`app.api-keys.<owner-id>: <secret>` (see `application.yml`); the owner id is stored
+as `ownerId` on every record that key creates. Enforcement is **fail-closed** — with
+no keys configured, every `POST /shorten` returns `401`. In real environments the keys
+come from a mounted Secret (Day 5).
 
 ### Example
 
 ```bash
 curl -s -XPOST localhost:8080/shorten \
   -H 'Content-Type: application/json' \
+  -H 'X-API-Key: dev-secret-change-me' \
   -d '{"longUrl":"https://example.com/very/long/path"}'
 # -> {"code":"aZ3kP9","shortUrl":"http://localhost:8080/aZ3kP9","longUrl":"https://example.com/very/long/path"}
 
-curl -s -i localhost:8080/aZ3kP9          # 302 Location: https://example.com/...
+curl -s -XPOST localhost:8080/shorten \
+  -H 'Content-Type: application/json' \
+  -d '{"longUrl":"https://example.com/x"}'
+# -> 401 {"timestamp":"...","error":"Missing X-API-Key header"}
+
+curl -s -i localhost:8080/aZ3kP9          # 302 Location: https://example.com/...  (no key needed)
 curl -s localhost:8080/aZ3kP9/stats       # {"code":"aZ3kP9",...,"clickCount":1,...}
 ```
 

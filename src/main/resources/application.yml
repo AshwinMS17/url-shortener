@@ -3,6 +3,12 @@ server:
 
 app:
   base-url: http://localhost:8080
+  # Clients allowed to create short URLs, as <owner-id>: <secret>.
+  # Fail-closed: with none configured, every POST /shorten returns 401.
+  # Real environments inject these from a mounted Secret (Day 5); the entry
+  # below is a throwaway local default - override or remove it for anything real.
+  api-keys:
+    local-dev: ${LOCAL_DEV_API_KEY:dev-secret-change-me}
 
 management:
   endpoints:
