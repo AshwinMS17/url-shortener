@@ -4,6 +4,7 @@ import com.urlshortener.model.ShortUrl;
 import com.urlshortener.model.ShortenRequest;
 import com.urlshortener.model.ShortenResponse;
 import com.urlshortener.model.StatsResponse;
+import com.urlshortener.security.ApiKeyAuthInterceptor;
 import com.urlshortener.service.UrlService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,11 +27,11 @@ public class UrlController {
     @PostMapping("/shorten")
     public ResponseEntity<ShortenResponse> shorten(
             @Valid @RequestBody ShortenRequest request,
-            @RequestHeader(value = "X-API-Key", required = false, defaultValue = "anonymous") String apiKey) {
+            @RequestAttribute(ApiKeyAuthInterceptor.OWNER_ATTRIBUTE) String ownerId) {
 
-        // Day 1-2: apiKey is accepted but not enforced yet.
-        // Day 4 will validate it against known keys and use it as ownerId for real.
-        ShortUrl created = urlService.createShortUrl(request.getLongUrl(), apiKey);
+        // ownerId is set by ApiKeyAuthInterceptor after it validates the X-API-Key header,
+        // so by the time we get here the caller is authenticated.
+        ShortUrl created = urlService.createShortUrl(request.getLongUrl(), ownerId);
 
         ShortenResponse response = new ShortenResponse(
                 created.getCode(),
