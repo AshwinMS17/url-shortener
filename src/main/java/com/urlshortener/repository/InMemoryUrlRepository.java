@@ -9,12 +9,13 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Day 1-2 storage: a thread-safe in-memory map, active whenever the
+ * Default storage: a thread-safe in-memory map, active whenever the
  * "dynamodb" profile is NOT set. Nothing persists across restarts,
- * which is fine while we're just proving the API logic out.
+ * which is fine for local development and the API-logic tests.
  *
- * On Day 3, DynamoDbUrlRepository will take over when we activate
- * the "dynamodb" profile - the rest of the app won't need to change.
+ * {@link DynamoDbUrlRepository} takes over when the "dynamodb" profile is
+ * active - the service layer depends only on {@link UrlRepository}, so
+ * nothing else changes.
  */
 @Repository
 @Profile("!dynamodb")
@@ -35,5 +36,16 @@ public class InMemoryUrlRepository implements UrlRepository {
     @Override
     public boolean existsByCode(String code) {
         return store.containsKey(code);
+    }
+
+    @Override
+    public Optional<ShortUrl> incrementClickCountAndGet(String code) {
+        // ConcurrentHashMap.compute runs atomically for the key; the ShortUrl's
+        // own AtomicLong keeps the increment safe even without that guarantee.
+        ShortUrl updated = store.computeIfPresent(code, (key, shortUrl) -> {
+            shortUrl.incrementClickCount();
+            return shortUrl;
+        });
+        return Optional.ofNullable(updated);
     }
 }

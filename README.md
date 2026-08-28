@@ -12,7 +12,7 @@ See [REQUIREMENTS.md](REQUIREMENTS.md) for the full spec and the phased (Day 1�
 | Phase | Scope | Status |
 |-------|-------|--------|
 | Day 1–2 | In-memory REST API: shorten, redirect, stats, validation, error handling | ✅ Done |
-| Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ⬜ |
+| Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ✅ Done |
 | Day 4 | API-key authentication; real `ownerId` on records | ⬜ |
 | Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ⬜ |
 
@@ -23,6 +23,32 @@ mvn spring-boot:run
 ```
 
 The service starts on `http://localhost:8080` (configurable via `app.base-url` / `server.port`).
+By default it uses an in-memory store that resets on restart.
+
+### With DynamoDB persistence
+
+Activate the `dynamodb` profile. Against a local LocalStack / DynamoDB Local:
+
+```bash
+docker run --rm -p 4566:4566 localstack/localstack:3.5
+
+SPRING_PROFILES_ACTIVE=dynamodb \
+DYNAMODB_ENDPOINT=http://localhost:4566 \
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+DYNAMODB_CREATE_TABLE=true \
+mvn spring-boot:run
+```
+
+Against real AWS, set only `SPRING_PROFILES_ACTIVE=dynamodb` and `AWS_REGION`; credentials
+come from the default provider chain (env, shared profile, or the pod's IAM role on EKS),
+and the table is provisioned by infrastructure-as-code (Day 5).
+
+| Env var | Purpose | Default |
+|---|---|---|
+| `DYNAMODB_TABLE_NAME` | Table name | `url-shortener` |
+| `AWS_REGION` | Region | `us-east-1` |
+| `DYNAMODB_ENDPOINT` | Endpoint override for LocalStack/local | *(none → real AWS)* |
+| `DYNAMODB_CREATE_TABLE` | Create the table on startup if missing | `false` |
 
 ## API
 
@@ -49,4 +75,53 @@ curl -s localhost:8080/aZ3kP9/stats       # {"code":"aZ3kP9",...,"clickCount":1,
 
 ```bash
 mvn clean verify
+```
+
+This runs the unit / in-memory tests. The DynamoDB integration test
+(`DynamoDbUrlRepositoryTest`) needs a Docker daemon and **self-skips** when one
+isn't reachable, so `mvn verify` stays green on a machine without Docker.
+
+### Running the DynamoDB tests
+
+`DynamoDbUrlRepositoryTest` uses [Testcontainers](https://java.testcontainers.org/)
+to boot LocalStack and exercise the real DynamoDB API (save/get, the atomic
+counter update expression, `@DynamoDbBean` mapping, concurrent increments).
+
+This project uses [Colima](https://github.com/abiosoft/colima) as the Docker
+runtime — a lightweight VM that installs and uninstalls cleanly (no Docker
+Desktop, no privileged helper):
+
+```bash
+brew install colima docker      # one-time
+colima start --cpu 2 --memory 4 --disk 20
+```
+
+Then run the full suite through the helper script:
+
+```bash
+./scripts/integration-tests.sh
+```
+
+The script exports the two Colima-specific hints Testcontainers needs
+(`DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`) and runs `mvn verify`.
+The Docker API version pin lives in `pom.xml` (surefire `<argLine>`), because
+Colima's engine rejects the docker-java client's default. Extra Maven args pass
+through: `./scripts/integration-tests.sh -Dtest=DynamoDbUrlRepositoryTest`.
+
+Stop the VM when you're done (state is kept for next time):
+
+```bash
+colima stop
+```
+
+### Removing the Docker setup
+
+Nothing here touches system files; removal is complete:
+
+```bash
+colima stop
+colima delete            # deletes the VM and every image/container inside it
+brew uninstall colima docker
+brew autoremove          # drops the 'lima' dependency colima pulled in
+rm -rf ~/.colima ~/.lima ~/.docker    # optional: leftover config/state
 ```
