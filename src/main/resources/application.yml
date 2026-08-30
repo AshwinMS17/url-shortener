@@ -18,6 +18,15 @@ management:
   endpoint:
     health:
       show-details: never
+      # Expose /actuator/health/liveness and /actuator/health/readiness so the
+      # Kubernetes probes can target them (see k8s/deployment.yaml).
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
 # DynamoDB persistence. Only used when the "dynamodb" profile is active
 # (SPRING_PROFILES_ACTIVE=dynamodb); otherwise the in-memory repository is used.

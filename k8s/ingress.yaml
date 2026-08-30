@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: url-shortener
+  namespace: url-shortener
+  annotations:
+    # --- nginx-ingress (portable default) ---
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # --- OR, on EKS with the AWS Load Balancer Controller, drop the nginx
+    #     annotation above, set spec.ingressClassName to "alb" and use: ---
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:<ACCOUNT_ID>:certificate/<ID>
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - sho.rt
+      secretName: url-shortener-tls
+  rules:
+    - host: sho.rt
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: url-shortener
+                port:
+                  number: 80

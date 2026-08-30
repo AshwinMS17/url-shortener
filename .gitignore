@@ -6,3 +6,6 @@ target/
 .vscode/
 .DS_Store
 .env
+
+# real k8s secrets - only secret.example.yaml is tracked
+k8s/secret.yaml
