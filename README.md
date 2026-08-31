@@ -14,7 +14,7 @@ See [REQUIREMENTS.md](REQUIREMENTS.md) for the full spec and the phased (Day 1�
 | Day 1–2 | In-memory REST API: shorten, redirect, stats, validation, error handling | ✅ Done |
 | Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ✅ Done |
 | Day 4 | API-key authentication; real `ownerId` on records | ✅ Done |
-| Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ⬜ |
+| Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ✅ Done |
 
 ## Run
 
@@ -87,6 +87,21 @@ curl -s -XPOST localhost:8080/shorten \
 curl -s -i localhost:8080/aZ3kP9          # 302 Location: https://example.com/...  (no key needed)
 curl -s localhost:8080/aZ3kP9/stats       # {"code":"aZ3kP9",...,"clickCount":1,...}
 ```
+
+## Container & Kubernetes
+
+```bash
+docker build -t url-shortener:0.1.0 .
+docker run --rm -p 8080:8080 -e LOCAL_DEV_API_KEY=dev-secret-change-me url-shortener:0.1.0
+```
+
+Multi-stage build on a layered Spring Boot jar; runtime image is a `17-jre` base
+running as a non-root user. The app exposes `/actuator/health/liveness` and
+`/actuator/health/readiness` for Kubernetes probes.
+
+Kubernetes manifests and the full EKS + DynamoDB + IRSA walkthrough are in
+[`k8s/`](k8s/README.md): `kubectl apply -k k8s/` once the image, table, IAM role,
+and Secret are in place.
 
 ## Test
 

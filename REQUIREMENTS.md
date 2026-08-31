@@ -18,7 +18,7 @@ Build is phased so each stage runs on its own before the next is wired in:
 | Day 1–2 | In-memory REST API: shorten, redirect, stats, validation, error handling | ✅ Done |
 | Day 3 | DynamoDB persistence behind the `dynamodb` Spring profile | ✅ Done |
 | Day 4 | API-key authentication; real `ownerId` on records | ✅ Done |
-| Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ⬜ Not started (`k8s/` dir is empty) |
+| Day 5 | Dockerfile + Kubernetes manifests + AWS (EKS/DynamoDB) deploy | ✅ Done |
 
 ---
 
@@ -138,11 +138,47 @@ Branch `day4-api-keys`.
 Not done (candidates, not in the original scope): owner-scoped stats (only the owner can
 see a code's stats), a `GET /urls` listing per owner, key rotation/hashing at rest.
 
-## Day 5 — Containerize & deploy (planned)
+## Day 5 — Containerize & deploy (implemented)
 
-- `Dockerfile` for the Spring Boot app.
-- Kubernetes manifests in `k8s/` (currently empty): Deployment, Service, and likely ConfigMap/Secret (AWS region, table name, API keys) and Ingress. Wire actuator health to readiness/liveness probes.
-- AWS: DynamoDB table `url-shortener` (partition key `code`); run on EKS. IAM/IRSA for DynamoDB access.
+Branch `day5-k8s-aws`. Full walkthrough in [`k8s/README.md`](k8s/README.md).
+
+- **`Dockerfile`** — multi-stage. Build stage: `maven:3.9-eclipse-temurin-17`, deps cached
+  on `pom.xml`, `package -DskipTests` (tests need a Docker daemon), then
+  `layertools extract`. Runtime stage: `eclipse-temurin:17-jre-jammy`, layered copy,
+  fixed non-root uid/gid 1000, `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0`,
+  `JarLauncher` entrypoint. `.dockerignore` keeps the context lean. Image ≈ 435 MB.
+- **Actuator probes** — `application.yml` now enables health groups
+  (`management.endpoint.health.probes.enabled`, liveness/readiness state), so
+  `/actuator/health/liveness` and `/actuator/health/readiness` exist.
+- **`k8s/` manifests** (validated with `kubeconform -strict` against k8s 1.29):
+  - `namespace.yaml`, `serviceaccount.yaml` (IRSA `role-arn` annotation placeholder)
+  - `configmap.yaml` — `SPRING_PROFILES_ACTIVE=dynamodb`, `AWS_REGION`,
+    `DYNAMODB_TABLE_NAME`, `DYNAMODB_CREATE_TABLE=false`, `APP_BASE_URL`
+  - `secret.example.yaml` — template for `APP_APIKEYS_<OWNER>` entries; the real
+    Secret is created out-of-band and `k8s/secret.yaml` is git-ignored
+  - `deployment.yaml` — 2 replicas, rolling update `maxUnavailable=0`,
+    `serviceAccountName`, pod + container `securityContext` (`runAsNonRoot`,
+    `readOnlyRootFilesystem` with an `emptyDir` at `/tmp`, drop ALL caps,
+    `seccompProfile: RuntimeDefault`), CPU/mem requests+limits, `envFrom`
+    config+secret, startup/readiness/liveness probes on the actuator paths
+  - `service.yaml` — ClusterIP :80 → :8080
+  - `ingress.yaml` — nginx class + TLS by default; AWS Load Balancer Controller
+    (ALB) annotations documented inline as the EKS alternative
+  - `hpa.yaml` — CPU-target autoscale 2 → 6
+  - `kustomization.yaml` — `kubectl apply -k k8s/` (excludes `secret.example.yaml`),
+    with an `images:` tag override
+- **AWS story** (documented, not executed — no cluster here): ECR build/push,
+  `aws dynamodb create-table` (partition key `code`, `PAY_PER_REQUEST`),
+  IAM policy (`GetItem`/`PutItem`/`UpdateItem` on the table ARN) +
+  `eksctl create iamserviceaccount` for IRSA. The app's `DefaultCredentialsProvider`
+  consumes the projected web-identity token with no code change.
+
+Verified locally: `docker build` succeeds; the container serves `/actuator/health`
+(UP, groups liveness+readiness both 200), runs as uid 1000, and completes the full
+shorten → redirect → stats flow with the API key (401 without it).
+
+Not done (out of scope): Terraform/CDK for the AWS resources, a real cluster deploy,
+CI to build/push the image, GSI on `ownerId`.
 
 ---
 

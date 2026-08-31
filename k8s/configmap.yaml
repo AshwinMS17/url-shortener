@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-shortener-config
+  namespace: url-shortener
+data:
+  # Non-secret runtime config, surfaced to the app as environment variables
+  # (Spring relaxed binding maps these onto the matching properties).
+  SPRING_PROFILES_ACTIVE: "dynamodb"
+  AWS_REGION: "us-east-1"
+  DYNAMODB_TABLE_NAME: "url-shortener"
+  # The table is provisioned out-of-band (see k8s/README.md), so leave this false.
+  DYNAMODB_CREATE_TABLE: "false"
+  # Public origin used to build the short URLs in responses.
+  APP_BASE_URL: "https://sho.rt"
